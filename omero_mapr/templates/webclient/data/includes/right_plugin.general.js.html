@@ -67,80 +67,96 @@ var isURL = function(input) {
 
 var old_linkify_element = OME.linkify_element;
 OME.linkify_element = function(elements) {
-    if ($("table.keyValueTable").is(elements) ) {
+    elements.each(function() {
         var mapr_menu = {% mapr_menu_config %};
+        var mapr_kvsubst = {% mapr_kvsubst_config %};
 
-        // Replace namespace with label
-        var ns2menu = {};
-        $.each( mapr_menu, function( i, obj ) {
-            $.each( obj['ns'], function( j, ns ) {
-                ns2menu[ns] = obj['label'];
+        if ($(this).is("table.keyValueTable")) {
+            var element = $(this);
+
+            // Replace namespace with label
+            var ns2menu = {};
+            $.each( mapr_menu, function( i, obj ) {
+                $.each( obj['ns'], function( j, ns ) {
+                    ns2menu[ns] = obj['label'];
+                });
             });
-        });
-        var t = elements.find("thead").find("tr");
-        var $targets = t.filter(function() {
-            if ($(this).attr('title') in ns2menu) {
-                var old = $(this).children("th").text();
-                $(this).children("th").html("<h1>" + ns2menu[$(this).attr('title')] + "</h1>");
-                $(this).closest('tr').nextAll("tr.tooltip").children('th').children('span')
-                    .append('<br/><b>NS:</b> ' + old + '');
-            }
-        });
-
-        // linkify also mapr keys and convert URL to icons
-        var menu2keys = [];
-        var keys2menu = {};
-        $.each( mapr_menu, function( i, obj ) {
-            $.merge(menu2keys, obj['all']);
-            $.each( obj['all'], function( j, d ) {
-                keys2menu[d] = i
-            });
-        });
-
-        elements.find("tbody").find("tr").each(function() {
-            var $row = $(this);
-            if (!$row.parent().parent().hasClass("editableKeyValueTable")) {
-                var $chlabel = $row.children("td:nth-child(1)");
-                var $chvalue = $row.children("td:nth-child(2)");
-                // if label matchs mapr PK
-                var _key = $chlabel.text().trim();
-                var _val = $chvalue.text().trim();
-                var _tkey = _key.replace(/url/i, "").trim();
-                if ( $.inArray(_tkey, menu2keys) > -1  ) {
-                    $chvalue.html(iconify($chvalue.text()));
-                    if ( $.inArray(_key, menu2keys) > -1 ) {
-                        if ( _key in keys2menu && keys2menu[_key] !== undefined ) {
-                            // create mapr url
-                            var _url = location.protocol + "//" + location.host + "{% url 'maprindex' %}" + keys2menu[_key] +"/?value=" + encodeURIComponent(_val);
-                            $chvalue.html($chvalue.html().replace(_val, '<a href="' + _url + '">' + _val + '</a>'));
-                        }
-                    }
-                    if ( _key.match(new RegExp("url", "i"))  ) {
-                        // Find nearest URL
-                        //var $target1 = $row.prev('tr');
-                        var $target = $row.parent().find("tr").filter(function() {
-                            var $chl = $(this).children("td:nth-child(1)");
-                            var $chv = $(this).children("td:nth-child(2)");
-                            var $chs = $row.children("td:nth-child(2)").find("span a img").attr('src');
-                            return $chl.text() === _tkey && (($chv.find("a").text().lenght > 0 && ($chs.indexOf(encodeURIComponent($chv.find("a").text())) >= 0 || $chs.indexOf($chv.find("a").text()) >= 0)) || ($chv.text().length > 0 && ($chs.indexOf(encodeURIComponent($chv.text())) >= 0 || $chs.indexOf($chv.text()) >= 0)));
-                        }).closest("tr");
-                        if ( $target.length ) {
-                            var $targetchlabel = $target.children("td:nth-child(1)");
-                            var $targetchvalue = $target.children("td:nth-child(2)");
-                            // add icon to the target and hide
-                            $targetchvalue.append($chvalue.html());
-                            $row.hide();
-                        }
-                    }
-                } else {
-                    old_linkify_element($row);
+            var t = element.find("thead").find("tr");
+            var namespace = (t.attr("title") || "");
+            var $targets = t.filter(function() {
+                if ($(this).attr('title') in ns2menu) {
+                    var old = $(this).children("th").text();
+                    $(this).children("th").html("<h1>" + ns2menu[$(this).attr('title')] + "</h1>");
+                    $(this).closest('tr').nextAll("tr.tooltip").children('th').children('span')
+                        .append('<br/><b>NS:</b> ' + old + '');
                 }
-            }
+            });
 
-        });
-    } else {
-        old_linkify_element(elements);
-    }
+            // linkify also mapr keys and convert URL to icons
+            var menu2keys = [];
+            var keys2menu = {};
+            $.each( mapr_menu, function( i, obj ) {
+                // FIXME: This should prevent keys-values in other namespace being linked
+                // but it also breaks the automatic icons for external URLs
+                // https://github.com/ome/omero-mapr/issues/48
+                //if (mapr_menu["ns"] == namespace) {
+                $.merge(menu2keys, obj['all']);
+                $.each( obj['all'], function( j, d ) {
+                    keys2menu[d] = i
+                });
+                //}
+            });
+
+            element.find("tbody").find("tr").each(function() {
+                var $row = $(this);
+                if (!$row.parent().parent().hasClass("editableKeyValueTable")) {
+                    var $chlabel = $row.children("td:nth-child(1)");
+                    var $chvalue = $row.children("td:nth-child(2)");
+                    // if label matchs mapr PK
+                    var _key = $chlabel.text().trim();
+                    var _val = $chvalue.text().trim();
+                    // This returns the HTML escaped value of the text
+                    var _valEscaped = $chvalue.html().trim();
+                    var _tkey = _key.replace(/url/i, "").trim();
+                    if ( $.inArray(_tkey, menu2keys) > -1  ) {
+                        $chvalue.html(iconify($chvalue.text()));
+                        if ( $.inArray(_key, menu2keys) > -1 ) {
+                            if ( _key in keys2menu && keys2menu[_key] !== undefined ) {
+                                // create mapr url
+                                var _url = location.protocol + "//" + location.host + "{% url 'maprindex' %}" + keys2menu[_key] +"/?value=" + encodeURIComponent(_val);
+                                $chvalue.html($chvalue.html().replace(_val, '<a href="' + _url + '">' + _valEscaped + '</a>'));
+                            }
+                        }
+                        if ( _key.match(new RegExp("url", "i"))  ) {
+                            // Find nearest URL
+                            //var $target1 = $row.prev('tr');
+                            var $target = $row.parent().find("tr").filter(function() {
+                                var $chl = $(this).children("td:nth-child(1)");
+                                var $chv = $(this).children("td:nth-child(2)");
+                                var $chs = $row.children("td:nth-child(2)").find("span a img").attr('src');
+                                return $chl.text() === _tkey && (($chv.find("a").text().lenght > 0 && ($chs.indexOf(encodeURIComponent($chv.find("a").text())) >= 0 || $chs.indexOf($chv.find("a").text()) >= 0)) || ($chv.text().length > 0 && ($chs.indexOf(encodeURIComponent($chv.text())) >= 0 || $chs.indexOf($chv.text()) >= 0)));
+                            }).closest("tr");
+                            if ( $target.length ) {
+                                var $targetchlabel = $target.children("td:nth-child(1)");
+                                var $targetchvalue = $target.children("td:nth-child(2)");
+                                // add icon to the target and hide
+                                $targetchvalue.append($chvalue.html());
+                                $row.hide();
+                            }
+                        }
+                    } else if (namespace in mapr_kvsubst && _key in mapr_kvsubst[namespace]) {
+                        var subst = mapr_kvsubst[namespace][_key].replace(/\{\{value\}\}/g, _valEscaped);
+                        $chvalue.empty().html(subst);
+                    } else {
+                        old_linkify_element($row);
+                    }
+                }
+
+            });
+        } else {
+            old_linkify_element($(this));
+        }
+    });
 };
 
 

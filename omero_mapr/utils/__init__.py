@@ -32,3 +32,18 @@ def config_list_to_dict(config_list):
             if i.get('config', None) is not None:
                 config_dict[k] = i['config']
     return config_dict
+
+
+def kvsubst_list_to_dict(kvsubst_list):
+    kvsubst_dict = {}
+    for i in json.loads(kvsubst_list):
+        namespace = i.get('namespace', '')
+        key = i.get('key', None)
+        value = i.get('value', None)
+        if key is not None and value is not None:
+            try:
+                kvsubst_dict[namespace][key] = value
+            except KeyError:
+                kvsubst_dict[namespace] = {}
+                kvsubst_dict[namespace][key] = value
+    return kvsubst_dict
